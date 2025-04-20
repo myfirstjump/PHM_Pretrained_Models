@@ -1,0 +1,19 @@
+# Build and Release Folders
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
+
+# Other files and folders
+.settings/
+timesfm/
+__pycache__/
+
+# Executables
+*.swf
+*.air
+*.ipa
+*.apk
+*.ipynb
+*.ipynb_checkpoints
+*.cpython-*

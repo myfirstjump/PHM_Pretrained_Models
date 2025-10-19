@@ -1,0 +1,93 @@
+下載模型
+git lfs install
+git clone https://huggingface.co/google/timesfm-1.0-200m-pytorch
+
+Update - Sept. 15, 2025
+TimesFM 2.5 is out!
+
+Comparing to TimesFM 2.0, this new 2.5 model:
+
+uses 200M parameters, down from 500M.
+supports up to 16k context length, up from 2048.
+supports continuous quantile forecast up to 1k horizon via an optional 30M quantile head.
+gets rid of the frequency indicator.
+has a couple of new forecasting flags.
+
+2025-09-29
+	由於Timesfm 2.5需要py >= 3.11，所以我重新build一個環境
+		conda create -n timesfm_2.5 python=3.11 -y
+		conda activate timesfm_2.5
+	並且檢查我的CUDA version，是12.6
+		nvidia-smi
+			NVIDIA-SMI 560.94                 Driver Version: 560.94         CUDA Version: 12.6
+	安裝相應的PyTorch版本
+		pip install torch --index-url https://download.pytorch.org/whl/cu121
+		
+	安裝其他套件
+		conda install -n timesfm_2.5 -c conda-forge -y numpy scipy pandas scikit-learn matplotlib seaborn jupyter
+	由於conda-forge這個channel卡非常久，所以chatGPT建議使用mamba，可以加速10倍以上
+	先安裝mamba在base環境
+		conda install -n base -c conda-forge mamba -y
+	好的，再裝其他套件前先測試一下torch，看起來沒問題。
+		Python 3.11.13 | packaged by Anaconda, Inc. | (main, Jun  5 2025, 13:03:15) [MSC v.1929 64 bit (AMD64)] on win32
+		Type "help", "copyright", "credits" or "license" for more information.
+		>>>
+		>>> import torch
+		C:\Users\myfirstjump\anaconda3\envs\timesfm_2.5\Lib\site-packages\torch\_subclasses\functional_tensor.py:295: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\builder\windows\pytorch\torch\csrc\utils\tensor_numpy.cpp:84.)
+		  cpu = _conversion_method_template(device=torch.device("cpu"))
+		>>> print(torch.__version__)      # 檢查 PyTorch 版本
+		2.5.1+cu121
+		>>> print(torch.version.cuda)     # 檢查 PyTorch 編譯時的 CUDA 版本 (應該顯示 12.1)
+		12.1
+		>>> print(torch.cuda.is_available())  # True 表示 GPU 可用
+		True
+		>>> print(torch.cuda.get_device_name(0))  # 應該會顯示 GeForce RTX 2060
+		NVIDIA GeForce RTX 2060
+		>>>
+	透過mamba去安裝套件，真的很快
+		(timesfm_2.5) PS C:\Users\myfirstjump\Documents\Repository\PHM_Pretrained_Models\timesfm> mamba install -n timesfm_2.5 -c conda-forge numpy scipy pandas scikit-learn matplotlib seaborn jupyter
+	好了，正是要安裝timeFM，我發現pip install timefm==2.5會有版本問題，總之我最後用開發者版本的方式安裝：
+		git clone https://github.com/google-research/timesfm.git
+		cd timesfm
+		git pull origin main
+		pip install -e .
+	我透過chatGPT提供的小程式確實執行timesfm後，輸出圖片過程有小問題，但直接存圖檔後可以解決
+		設定
+			import os
+			os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"   
+			import matplotlib
+			matplotlib.use("Agg")
+		顯示改為輸出圖片
+		    # plt.show()
+			plt.savefig("timesfm_plot.png", dpi=150)
+	解析一下程式碼：
+		1. 定義test_timesfm函數
+			-. 確認CUDA版本
+			-. 製作測試資料
+				sin函數，共生成120個time points，然後設定context是前100個，後面20個做為預測對象，即horizon=20。
+			-. 載入指定的timesfm model，這裡使用2.5-200m-pytorch版本
+			-. config部分設計以及compile: 
+				1) max_context, max_horizon: 可以，我的應用數據不會超過這個設定值: 1024, 256
+				2) normalize_input: 我的應用數據會先進行正規化，所以True/False都可以。
+				3) use_continuous_quantile_head: 不確定這個概念，不過若是可以輸出q10, q90，對於預測視覺化有幫助。
+				4) force_flip_invariance: 這個概念第一次看到
+				5) infer_is_positive: 這個概念第一次看到，不過設定為False應該可以略過。
+				6) fix_quantile_crossing: 我猜應該是q10, q90的預測區間交叉時的處理，不過首發的論文沒有提到這個。
+			-. inference得到點預測、quantile預測，並將真值、預測值繪圖，並繪製q10-q90區間。
+		2. 執行test_timesfm()
+				
+2025-10-08
+	將機智雲landing_gear數據整理好的features data複製一份到Repository\PHM_Pretrained_Models\data\
+		F05AllFeatures.csv
+		faultyAllFeatures.csv
+		healthyAllFeatures.csv
+		testingAllFeatures.csv
+		
+2025-10-19
+	任務描述:
+		F05 64架次檔案，用來作為歷史context，預測後續faulty時間。
+			64架次為(01244~01431中的64個紀錄節點)
+			
+			training編號:
+				Healthy: 00872-00913 (14)
+				Faulty:	 00845-00871 (16)

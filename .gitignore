@@ -8,6 +8,8 @@ bin-release/
 .settings/
 timesfm/
 __pycache__/
+data/
+models/
 
 # Executables
 *.swf

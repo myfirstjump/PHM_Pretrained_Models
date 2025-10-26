@@ -332,8 +332,8 @@ os.makedirs(predDir, exist_ok=True)
 
 # ==== 參數 ====
 ava = "F05"
-N_CONTEXT = 48
-N_HORIZON = 16
+N_CONTEXT = 42
+N_HORIZON = 6
 # ==== 1) 由資料夾 → 特徵 → HI(CV) → MA50 ====
 # 先處理前48架次（F05），再處理16架次（F05_prediction_gt），最後合併
 folder_ctx = os.path.join(dataDir, "F05")                 # 前48
@@ -369,84 +369,87 @@ hi_df.to_csv(os.path.join(predDir, f"{ava}_HI_full.csv"))   # flight, CV, MA50
 
 # ==== 2) 取前 48 架次當「模型輸入」 ====
 ctx_df = hi_df.iloc[:N_CONTEXT].copy()
-ctx_df[["MA50"]].to_csv(os.path.join(predDir, f"{ava}_train_context_MA50.csv"))
+ctx_df[["MA20", "MA30", "MA40", "MA50"]].to_csv(os.path.join(predDir, f"{ava}_train_context_MA20-50.csv"))
 
 # 未來 16 架次（**用連號外推**；若你的 flight 不是連號，可改成依實際 gt 的 flight 編號對齊）
-last_flt = int(ctx_df.index[-1])
-future_index = np.arange(last_flt + 1, last_flt + 1 + N_HORIZON)
+last_flt = int(ctx_df.index[-1]) # F05-1398
+future_index = np.arange(last_flt + 1, last_flt + 1 + N_HORIZON) # 1399-1415
 
-# ==== 3) 三種傳統模型：用「前 48 MA50」外推後 16 ====
-y_ctx = ctx_df["MA50"].values.astype(float)
 
-# (a) AR (自動挑階數)
-try:
-    ar_order = ar_select_order(y_ctx, maxlag=10, glob=True, trend="ct")
-    ar_res = ar_order.model.fit()
-    ar_pred = ar_res.predict(start=len(y_ctx), end=len(y_ctx) + N_HORIZON - 1)
-    ar_pred = np.asarray(ar_pred).ravel()
-except Exception as e:
-    print("[AR] fallback:", e)
-    ar_pred = np.full(N_HORIZON, np.nan)
+for RND in ["MA20", "MA30", "MA40", "MA50"]:
 
-# (b) GPR
-k0 = WhiteKernel(noise_level=0.3**2, noise_level_bounds=(0.1**2, 0.5**2))
-k1 = ExpSineSquared(length_scale=1.0, periodicity=40, periodicity_bounds=(20, 80))
-k2 = RBF(length_scale=1e2, length_scale_bounds=(1, 1e3))
-kernel = k0 + k1 + k2
+    # ==== 3) 三種傳統模型：用「前 48 MA50」外推後 16 ====
+    y_ctx = ctx_df[RND].values.astype(float)
 
-X_train = np.arange(len(y_ctx)).reshape(-1, 1)
-gpr = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=False)
-gpr.fit(X_train, y_ctx.reshape(-1, 1))
-X_future = np.arange(len(y_ctx), len(y_ctx) + N_HORIZON).reshape(-1, 1)
-gpr_pred, _ = gpr.predict(X_future, return_std=True)
-gpr_pred = gpr_pred.ravel()
+    # (a) AR (自動挑階數)
+    try:
+        ar_order = ar_select_order(y_ctx, maxlag=10, glob=True, trend="ct")
+        ar_res = ar_order.model.fit()
+        ar_pred = ar_res.predict(start=len(y_ctx), end=len(y_ctx) + N_HORIZON - 1)
+        ar_pred = np.asarray(ar_pred).ravel()
+    except Exception as e:
+        print("[AR] fallback:", e)
+        ar_pred = np.full(N_HORIZON, np.nan)
 
-# (c) ARIMA(2,1,0)（可再調整）
-try:
-    arima = ARIMA(y_ctx, order=(2, 1, 0), trend='t')
-    arima_res = arima.fit(method='innovations_mle')
-    arima_pred = arima_res.forecast(steps=N_HORIZON)
-    arima_pred = np.asarray(arima_pred).ravel()
-except Exception as e:
-    print("[ARIMA] fallback:", e)
-    arima_pred = np.full(N_HORIZON, np.nan)
+    # (b) GPR
+    k0 = WhiteKernel(noise_level=0.3**2, noise_level_bounds=(0.1**2, 0.5**2))
+    k1 = ExpSineSquared(length_scale=1.0, periodicity=40, periodicity_bounds=(20, 80))
+    k2 = RBF(length_scale=1e2, length_scale_bounds=(1, 1e3))
+    kernel = k0 + k1 + k2
 
-# ==== 4) 整理與輸出 ====
-pred_df = pd.DataFrame({
-    "flight": future_index,
-    "AR": ar_pred,
-    "GPR": gpr_pred,
-    "ARIMA": arima_pred,
-}).set_index("flight")
+    X_train = np.arange(len(y_ctx)).reshape(-1, 1)
+    gpr = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=False)
+    gpr.fit(X_train, y_ctx.reshape(-1, 1))
+    X_future = np.arange(len(y_ctx), len(y_ctx) + N_HORIZON).reshape(-1, 1)
+    gpr_pred, _ = gpr.predict(X_future, return_std=True)
+    gpr_pred = gpr_pred.ravel()
 
-# 存各模型各自檔（方便單獨調試）與整合檔
-pred_df[["AR"]].to_csv(os.path.join(predDir, f"{ava}_AR_pred16.csv"))
-pred_df[["GPR"]].to_csv(os.path.join(predDir, f"{ava}_GPR_pred16.csv"))
-pred_df[["ARIMA"]].to_csv(os.path.join(predDir, f"{ava}_ARIMA_pred16.csv"))
-pred_df.to_csv(os.path.join(predDir, f"{ava}_traditional_pred16_all.csv"))
+    # (c) ARIMA(2,1,0)（可再調整）
+    try:
+        arima = ARIMA(y_ctx, order=(2, 1, 0), trend='t')
+        arima_res = arima.fit(method='innovations_mle')
+        arima_pred = arima_res.forecast(steps=N_HORIZON)
+        arima_pred = np.asarray(arima_pred).ravel()
+    except Exception as e:
+        print("[ARIMA] fallback:", e)
+        arima_pred = np.full(N_HORIZON, np.nan)
 
-# 也保留「輸入＋預測」一起的 64 點（前 48 + 後 16）供畫圖
-plot_64 = pd.concat(
-    [ctx_df[["MA50"]], pred_df.rename(columns={"AR":"MA50_AR","GPR":"MA50_GPR","ARIMA":"MA50_ARIMA"})],
-    axis="columns"
-)
-plot_64.to_csv(os.path.join(predDir, f"{ava}_context48_and_pred16_for_plot.csv"))
+    # ==== 4) 整理與輸出 ====
+    pred_df = pd.DataFrame({
+        "flight": future_index,
+        "AR": ar_pred,
+        "GPR": gpr_pred,
+        "ARIMA": arima_pred,
+    }).set_index("flight")
 
-# ==== 5) 視覺化（全長 64 點，只畫 MA50 與三條預測）====
-plt.figure(figsize=(8, 5))
-# context（實際 MA50）
-plt.plot(ctx_df.index.values, ctx_df["MA50"].values, label="MA50 (first 48)", linewidth=2)
+    # 存各模型各自檔（方便單獨調試）與整合檔
+    # pred_df[["AR"]].to_csv(os.path.join(predDir, f"{ava}_AR_{RND}_pred16.csv"))
+    # pred_df[["GPR"]].to_csv(os.path.join(predDir, f"{ava}_GPR_{RND}_pred16.csv"))
+    # pred_df[["ARIMA"]].to_csv(os.path.join(predDir, f"{ava}_ARIMA_{RND}_pred16.csv"))
+    pred_df.to_csv(os.path.join(predDir, f"{ava}_traditional_{RND}_pred16_all.csv"))
 
-# 三條外推
-plt.plot(future_index, ar_pred,    "--", label="AR pred",    linewidth=2)
-plt.plot(future_index, gpr_pred,   "--", label="GPR pred",   linewidth=2)
-plt.plot(future_index, arima_pred, "--", label="ARIMA pred", linewidth=2)
+    # # 也保留「輸入＋預測」一起的 64 點（前 48 + 後 16）供畫圖
+    # plot_64 = pd.concat(
+    #     [ctx_df[["MA50"]], pred_df.rename(columns={"AR":"MA50_AR","GPR":"MA50_GPR","ARIMA":"MA50_ARIMA"})],
+    #     axis="columns"
+    # )
+    # plot_64.to_csv(os.path.join(predDir, f"{ava}_context48_and_pred16_for_plot.csv"))
 
-plt.title(f"{ava} | MA50 context=48 → forecast 16 (AR/GPR/ARIMA)")
-plt.xlabel("Flight")
-plt.ylabel("CV (MA50)")
-plt.grid(True, alpha=0.3)
-plt.legend()
-plt.tight_layout()
-plt.savefig(os.path.join(predDir, f"{ava}_context48_pred16.png"), dpi=160)
-plt.show()
+# # ==== 5) 視覺化（全長 64 點，只畫 MA50 與三條預測）====
+# plt.figure(figsize=(8, 5))
+# # context（實際 MA50）
+# plt.plot(ctx_df.index.values, ctx_df["MA50"].values, label="MA50 (first 48)", linewidth=2)
+
+# # 三條外推
+# plt.plot(future_index, ar_pred,    "--", label="AR pred",    linewidth=2)
+# plt.plot(future_index, gpr_pred,   "--", label="GPR pred",   linewidth=2)
+# plt.plot(future_index, arima_pred, "--", label="ARIMA pred", linewidth=2)
+
+# plt.title(f"{ava} | MA50 context=48 → forecast 16 (AR/GPR/ARIMA)")
+# plt.xlabel("Flight")
+# plt.ylabel("CV (MA50)")
+# plt.grid(True, alpha=0.3)
+# plt.legend()
+# plt.tight_layout()
+# plt.savefig(os.path.join(predDir, f"{ava}_context48_pred16.png"), dpi=160)
+# plt.show()

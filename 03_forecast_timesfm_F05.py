@@ -9,8 +9,8 @@ os.makedirs(pred_dir, exist_ok=True)
 # === 讀完整 HI (CV, MA50)，切分前48後16 ===
 df = pd.read_csv(pred_dir / "F05_HI_full.csv", index_col=0)
 df = df.sort_index()
-y_all = df["MA50"].astype(float).values
-N_CONTEXT, N_HORIZON = 48, 16
+y_all = df["MA20"].astype(float).values
+N_CONTEXT, N_HORIZON = 42, 6
 y_ctx = y_all[:N_CONTEXT]
 
 # === TimesFM ===
@@ -31,5 +31,36 @@ pred = pred[0]
 # === 存檔 ===
 future_flights = df.index[N_CONTEXT:N_CONTEXT+N_HORIZON]
 out = pd.DataFrame({"flight": future_flights, "TimesFM_pred": pred})
-out.to_csv(pred_dir / "F05_TimesFM_pred16.csv", index=False)
-print(f"[03] Saved: {pred_dir / 'F05_TimesFM_pred16.csv'}")
+out.to_csv(pred_dir / "F05_TimesFM_MA20_pred16.csv", index=False)
+print(f"[03] Saved: {pred_dir / 'F05_TimesFM_MA20_pred16.csv'}")
+
+
+### MA30
+y_all = df["MA30"].astype(float).values
+y_ctx = y_all[:N_CONTEXT]
+pred, _ = model.forecast(horizon=N_HORIZON, inputs=[y_ctx])
+pred = pred[0]
+future_flights = df.index[N_CONTEXT:N_CONTEXT+N_HORIZON]
+out = pd.DataFrame({"flight": future_flights, "TimesFM_pred": pred})
+out.to_csv(pred_dir / "F05_TimesFM_MA30_pred16.csv", index=False)
+print(f"[03] Saved: {pred_dir / 'F05_TimesFM_MA30_pred16.csv'}")
+
+### MA40
+y_all = df["MA40"].astype(float).values
+y_ctx = y_all[:N_CONTEXT]
+pred, _ = model.forecast(horizon=N_HORIZON, inputs=[y_ctx])
+pred = pred[0]
+future_flights = df.index[N_CONTEXT:N_CONTEXT+N_HORIZON]
+out = pd.DataFrame({"flight": future_flights, "TimesFM_pred": pred})
+out.to_csv(pred_dir / "F05_TimesFM_MA40_pred16.csv", index=False)
+print(f"[03] Saved: {pred_dir / 'F05_TimesFM_MA40_pred16.csv'}")
+
+### MA50
+y_all = df["MA50"].astype(float).values
+y_ctx = y_all[:N_CONTEXT]
+pred, _ = model.forecast(horizon=N_HORIZON, inputs=[y_ctx])
+pred = pred[0]
+future_flights = df.index[N_CONTEXT:N_CONTEXT+N_HORIZON]
+out = pd.DataFrame({"flight": future_flights, "TimesFM_pred": pred})
+out.to_csv(pred_dir / "F05_TimesFM_MA50_pred16.csv", index=False)
+print(f"[03] Saved: {pred_dir / 'F05_TimesFM_MA50_pred16.csv'}")

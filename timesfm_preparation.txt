@@ -2,6 +2,11 @@
 git lfs install
 git clone https://huggingface.co/google/timesfm-1.0-200m-pytorch
 
+GIT:
+git add .
+git commit -m '...'
+git push origin main (or master)
+
 Update - Sept. 15, 2025
 TimesFM 2.5 is out!
 
@@ -91,3 +96,30 @@ has a couple of new forecasting flags.
 			training編號:
 				Healthy: 00872-00913 (14)
 				Faulty:	 00845-00871 (16)
+				
+				
+2025-10-20
+	-. 安裝TTMs環境
+	
+		# 建環境
+			conda create -n ttm-env python=3.10 -y
+			conda activate ttm-env
+
+			# 安裝 PyTorch 2.5.x + CUDA 12.1
+			conda install -y -c pytorch -c nvidia pytorch pytorch-cuda=12.1
+
+			# 依賴（與你現有作法相容）
+			pip install numpy pandas matplotlib scikit-learn transformers accelerate einops datasets
+
+			# 安裝 Granite TSFM（選其中一種）
+			# A. 安裝官方教學指定的版本（穩定、常見在教學用）
+			pip install "granite-tsfm[notebooks] @ git+https://github.com/ibm-granite/granite-tsfm.git@v0.2.22"
+			# （來源：IBM 官方教學 Step 1.1）:contentReference[oaicite:1]{index=1}
+2025-10-26
+	目前問題整理:
+		1. F05在約第48個point的change point前後差異很大，模型基本上難以用前48預測後16個點。
+			-. 改以前32預測後32也不行，因為還是碰到第48點
+			-. 再改以32預測後16看看
+			-. 最後改以42預測後續6點。
+		2. TTMs模型的腳本還無法順利執行。
+			

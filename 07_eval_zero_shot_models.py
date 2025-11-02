@@ -7,7 +7,7 @@ pred_dir = Path(f"{root}\\prediction\\F05")
 
 # === 讀取資料 ===
 hi_df = pd.read_csv(pred_dir / "F05_HI_full.csv", index_col=0).sort_index()
-N_CONTEXT, N_HORIZON = 42, 6
+N_CONTEXT, N_HORIZON = 65, 16
 MA = 'MA50'
 
 # Ground truth: 後16筆

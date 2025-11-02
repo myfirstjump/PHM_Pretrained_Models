@@ -17,9 +17,9 @@ root = os.getcwd()
 pred_dir = Path(f"{root}\\prediction\\F05")
 pred_dir.mkdir(parents=True, exist_ok=True)
 
-CSV_INPUT = pred_dir / "F05_HI_full.csv"     # 與 TimesFM/Chronos 相同的輸入
-N_CONTEXT, N_HORIZON = 42, 6                 # 與 TimesFM/Chronos 相同
-MA_LIST = ["MA20", "MA30", "MA40", "MA50"]   # 逐一輸出
+CSV_INPUT = pred_dir / "01_F05_HI_full.csv"     # 與 TimesFM/Chronos 相同的輸入
+N_CONTEXT, N_HORIZON = 65, 16                 # 與 TimesFM/Chronos 相同
+MA_LIST = ["MA30"]   # 逐一輸出
 SERIES_ID = "F05"
 
 # === 輔助：從 TTM pipeline 的 list 預測欄位取「第一段 H 步」 ===
@@ -107,6 +107,6 @@ for MA in MA_LIST:
     print(future_flights, len(future_flights))
     print(y_pred, len(y_pred))
     out = pd.DataFrame({"flight": future_flights, "TTMs_pred": y_pred})
-    out_name = pred_dir / f"F05_TTMs_{MA}_pred16.csv"  # 與你現有腳本相同的檔名風格
+    out_name = pred_dir / f"09_F05_TTMs_{MA}_pred{N_HORIZON}.csv"  # 與你現有腳本相同的檔名風格
     out.to_csv(out_name, index=False)
     print(f"[TTMs] Saved: {out_name}")

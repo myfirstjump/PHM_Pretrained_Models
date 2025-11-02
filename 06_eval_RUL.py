@@ -4,12 +4,13 @@ from pathlib import Path
 
 root = os.getcwd()
 pred_dir = Path(f"{root}\\prediction\\F05")
+MA = 'MA30'
 
 # 讀 64 點 HI（MA50）
-hi_df = pd.read_csv(pred_dir / "F05_HI_full.csv", index_col=0).sort_index()
-y_all = hi_df["MA50"].values
+hi_df = pd.read_csv(pred_dir / "01_F05_HI_full.csv", index_col=0).sort_index()
+y_all = hi_df[MA].values
 fl_all = hi_df.index.values
-N_CONTEXT, H = 42, 6
+N_CONTEXT, H = 65, 16
 
 ctx = y_all[:N_CONTEXT]
 y_true = y_all[N_CONTEXT:N_CONTEXT+H]
@@ -18,8 +19,8 @@ fl_fut = fl_all[N_CONTEXT:N_CONTEXT+H]
 
 # 讀傳統模型 16 點預測
 # classic = pd.read_csv(pred_dir / "F05_traditional_pred16_all.csv", index_col=0)
-MA = 'MA20'
-classic = pd.read_csv(pred_dir / f"F05_traditional_{MA}_pred16_all.csv", index_col=0)
+
+classic = pd.read_csv(pred_dir / f"03_F05_traditional_{MA}_pred{H}_all.csv", index_col=0)
 preds = {
     "AR": classic["AR"].values,
     "GPR": classic["GPR"].values,
@@ -28,7 +29,8 @@ preds = {
 
 # 讀 TimesFM / Chronos（若存在）
 def read_pred(name, MA):
-    p = pred_dir / f"F05_{name}_{MA}_pred16.csv"
+    model_dict = {'TimesFM':'07', 'Chronos':'08', 'TTMs':'09'}
+    p = pred_dir / f"{model_dict[name]}_F05_{name}_{MA}_pred{H}.csv"
     if p.exists():
         df = pd.read_csv(p)
         return df["pred" if "TimesFM" not in name and "Chronos" not in name and "TTMs" not in name else df.columns[-1]].values
@@ -43,8 +45,10 @@ preds["TimesFM"] = read_pred('TimesFM', MA)
 preds["Chronos"] = read_pred('Chronos', MA)
 preds['TTMs'] = read_pred('TTMs', MA)
 
+print('AI Pretrained Model predicts: ', preds)
+
 # --- 閾值與 helper ---
-THR = 0.75
+THR = 0.7
 THR_STR = str(THR).replace('.', '_')
 
 def first_cross_idx(arr, thr=THR):
@@ -85,7 +89,7 @@ for m, phat in preds.items():
 rul_df = pd.DataFrame(rows).sort_values("AbsErr_steps", na_position="last").reset_index(drop=True)
 rul_df.insert(0, "true_cross_idx", true_row["true_cross_idx"])
 rul_df.insert(1, "true_cross_flight", true_row["true_cross_flight"])
-rul_df.to_csv(pred_dir / f"F05_eval_RUL_thr0p70.csv", index=False)
+rul_df.to_csv(pred_dir / f"10_F05_eval_RUL_thr{THR_STR}.csv", index=False)
 print(f"\n[RUL @ HI<={THR}]")
 print(rul_df)
 
@@ -111,5 +115,5 @@ plt.ylabel(f"CV ({MA})")
 plt.grid(True, alpha=0.3)
 plt.legend()
 plt.tight_layout()
-plt.savefig(pred_dir / "F05_eval_full64_RUL.png", dpi=160)
+plt.savefig(pred_dir / f"11_F05_eval_full{N_CONTEXT+H}_RUL.png", dpi=160)
 plt.show()

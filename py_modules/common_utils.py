@@ -54,15 +54,14 @@ def make_HI_series(folder_path, pipe_path, read_rawdata, extract_features, featu
     CV = proba[:, healthy_idx]
 
     ser = pd.Series(CV, index=pd.Index(idx, name="flight")).sort_index()
-    MA05 = causal_ma(ser, window=5)
-    MA10 = causal_ma(ser, window=10)
-    MA20 = causal_ma(ser, window=20)
-    MA30 = causal_ma(ser, window=30)
-    MA40 = causal_ma(ser, window=40)
-    MA50 = causal_ma(ser, window=50)
-    out = pd.DataFrame({"CV": ser.values, "MA05": MA05.values, "MA10": MA10.values, "MA20": MA20.values, "MA30": MA30.values, "MA40": MA40.values, "MA50": MA50.values}, index=ser.index)
+    # MA05 = causal_ma(ser, window=5)
+    # MA10 = causal_ma(ser, window=10)
+    # MA20 = causal_ma(ser, window=20)
+    # MA30 = causal_ma(ser, window=30)
+    # MA40 = causal_ma(ser, window=40)
+    # MA50 = causal_ma(ser, window=50)
+    out = pd.DataFrame({"CV": ser.values}, index=ser.index)
     return out
-
 
 
 ### Define directories

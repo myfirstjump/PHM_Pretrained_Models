@@ -4,7 +4,7 @@ from pathlib import Path
 
 root = os.getcwd()
 pred_dir = Path(f"{root}\\prediction\\F05")
-MA = 'MA30'
+MA = 'MA20'
 
 # 讀 64 點 HI（MA50）
 hi_df = pd.read_csv(pred_dir / "01_F05_HI_full.csv", index_col=0).sort_index()
@@ -48,7 +48,7 @@ preds['TTMs'] = read_pred('TTMs', MA)
 print('AI Pretrained Model predicts: ', preds)
 
 # --- 閾值與 helper ---
-THR = 0.7
+THR = 0.5
 THR_STR = str(THR).replace('.', '_')
 
 def first_cross_idx(arr, thr=THR):

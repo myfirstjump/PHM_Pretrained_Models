@@ -6,23 +6,24 @@ root = os.getcwd()
 pred_dir = Path(f"{root}\\prediction\\F05")
 
 # === 讀取資料 ===
-hi_df = pd.read_csv(pred_dir / "F05_HI_full.csv", index_col=0).sort_index()
+hi_df = pd.read_csv(pred_dir / "01_F05_HI_full.csv", index_col=0).sort_index()
 N_CONTEXT, N_HORIZON = 65, 16
-MA = 'MA50'
+MA = 'MA30'
 
 # Ground truth: 後16筆
 y_true = hi_df[MA].values[N_CONTEXT:N_CONTEXT+N_HORIZON]
 x_full = hi_df.index.values
 
 # === 讀取傳統模型結果 ===
-classic = pd.read_csv(pred_dir / f"F05_traditional_{MA}_pred16_all.csv", index_col=0)
+classic = pd.read_csv(pred_dir / f"03_F05_traditional_{MA}_pred{N_HORIZON}_all.csv", index_col=0)
 pred_ar    = classic["AR"].values
 pred_gpr   = classic["GPR"].values
 pred_arima = classic["ARIMA"].values
 
 # === 讀取 TimesFM / Chronos ===
 def read_pred(name, MA):
-    p = pred_dir / f"F05_{name}_{MA}_pred16.csv"
+    model_dict = {'TimesFM':'07', 'Chronos':'08', 'TTMs':'09'}
+    p = pred_dir / f"{model_dict[name]}_F05_{name}_{MA}_pred{N_HORIZON}.csv"
     if not p.exists():
         return None
     df = pd.read_csv(p)
@@ -54,7 +55,7 @@ if pred_chr is not None: add_metrics("Chronos", pred_chr)
 if pred_ttm is not None: add_metrics("TTMs", pred_chr)
 
 metrics_df = pd.DataFrame(metrics).sort_values("MAE").reset_index(drop=True)
-metrics_df.to_csv(pred_dir / "F05_eval_metrics.csv", index=False)
+metrics_df.to_csv(pred_dir / "12_F05_eval_metrics.csv", index=False)
 print(metrics_df)
 
 # === 視覺化：全長64點 ===
@@ -76,6 +77,6 @@ plt.ylabel(f"CV ({MA})")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(pred_dir / "F05_eval_full64.png", dpi=160)
+plt.savefig(pred_dir / "13_F05_eval_full64.png", dpi=160)
 plt.show()
 print(f"[05] Saved results and plot to {pred_dir}")

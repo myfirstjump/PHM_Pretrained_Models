@@ -59,6 +59,13 @@ gt_df = make_HI_series(
 
 # 合併 (index=flight)，排序後成為完整 64 筆
 hi_df = pd.concat([ctx_df, gt_df]).sort_index()
+hi_df['MA05'] = hi_df['CV'].rolling(window=5, min_periods=1).mean()
+hi_df['MA10'] = hi_df['CV'].rolling(window=10, min_periods=1).mean()
+hi_df['MA20'] = hi_df['CV'].rolling(window=20, min_periods=1).mean()
+hi_df['MA30'] = hi_df['CV'].rolling(window=30, min_periods=1).mean()
+hi_df['MA40'] = hi_df['CV'].rolling(window=40, min_periods=1).mean()
+hi_df['MA50'] = hi_df['CV'].rolling(window=50, min_periods=1).mean()
+
 hi_df.to_csv(os.path.join(predDir, f"01_{ava}_HI_full.csv"))
 print(f"[INFO] Saved full HI series ({len(hi_df)} flights) → {predDir}")
 

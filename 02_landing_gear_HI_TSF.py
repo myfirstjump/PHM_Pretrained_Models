@@ -175,16 +175,16 @@ for RND in ["MA05", "MA10", "MA20", "MA30", "MA40", "MA50"]:
 ## ==== 5) 視覺化（全長 64 點，只畫 MA50 與三條預測）====
     plt.figure(figsize=(8, 5))
     # context（實際 MA50）
-    plt.plot(ctx_df.index.values, ctx_df[RND].values, label=f"{RND} (context)", linewidth=2)
+    plt.plot(ctx_df.index.values, ctx_df[RND].values, label=f"Context", linewidth=2)
 
     # 三條外推
     plt.plot(future_index, ar_pred,    "--", label="AR pred",    linewidth=2)
     plt.plot(future_index, gpr_pred,   "--", label="GPR pred",   linewidth=2)
     plt.plot(future_index, arima_pred, "--", label="ARIMA pred", linewidth=2)
 
-    plt.title(f"{ava} | {RND} context={N_CONTEXT} → forecast {N_HORIZON} (AR/GPR/ARIMA)")
+    plt.title(f"Flight00 | context={N_CONTEXT} → forecast {N_HORIZON} (AR/GPR/ARIMA)")
     plt.xlabel("Flight")
-    plt.ylabel(f"CV ({RND})")
+    plt.ylabel(f"HI")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -201,9 +201,9 @@ try:
 
     plt.figure(figsize=(9,4.5))
     plt.scatter(ctx_x, ctx_cv, s=26, alpha=0.9)
-    plt.title(f"{ava} context CV (pre-MA) — first {N_CONTEXT} flights")
+    plt.title(f"Flight00 context HI — first {N_CONTEXT} flights")
     plt.xlabel("Flight")
-    plt.ylabel("CV (no moving average)")
+    plt.ylabel("HI")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 

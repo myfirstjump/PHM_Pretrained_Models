@@ -125,7 +125,7 @@ for MA in MA_LIST:
 
     # --- 畫圖：跟你原本一樣，只是檔名加 MA ---
     plt.figure(figsize=(10, 5))
-    plt.plot(fl_all, y_all, color="black", linewidth=3, label=f"Ground Truth ({MA})")
+    plt.plot(fl_all, y_all, color="black", linewidth=3, label=f"Ground Truth")
     plt.axvline(fl_ctx[-1], color="gray", linestyle=":", alpha=0.6)
     plt.axhline(THR, color="red", linestyle="--", alpha=0.7, label=f"Threshold {THR:.2f}")
 
@@ -141,9 +141,9 @@ for MA in MA_LIST:
             jitter = np.random.uniform(-0.02, 0.02)   # 在 THR 附近加擾動
             plt.scatter([fl_fut[idx]], [THR + jitter], s=70, marker="o", label=f"{m} crossing")
 
-    plt.title(f"F05 | RUL based on HI<={THR} ({MA})  ctx={N_CONTEXT}, horizon={H}")
+    plt.title(f"Flight00 | RUL based on HI<={THR} context={N_CONTEXT}, horizon={H}")
     plt.xlabel("Flight")
-    plt.ylabel(f"CV ({MA})")
+    plt.ylabel("HI")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()

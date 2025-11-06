@@ -93,9 +93,9 @@ for MA in MA_LIST:
     if pred_chr is not None: plt.plot(future_x, pred_chr, "--", label="Chronos")
     if pred_ttm is not None: plt.plot(future_x, pred_ttm, "--", label="TTMs")
 
-    plt.title(f"F05 | {N_CONTEXT}-context + {N_HORIZON}-forecast ({MA})")
+    plt.title(f"Flight00 | {N_CONTEXT}-context + {N_HORIZON}-forecast")
     plt.xlabel("Flight")
-    plt.ylabel(f"CV ({MA})")
+    plt.ylabel(f"HI")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()

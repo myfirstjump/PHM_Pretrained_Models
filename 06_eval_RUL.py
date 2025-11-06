@@ -1,119 +1,153 @@
-# === RUL 評估：誰先觸碰到 HI=0.6 ===
-import numpy as np, pandas as pd, matplotlib.pyplot as plt, os
+# 06_eval_RUL.py
+# 目的：
+# 1. 對 MA05~MA50 每一條都做 RUL 評估
+# 2. 保留原本「誰先碰到 THR → 算水平距離」的誤差
+# 3. 新增「GT 到達 THR 那一刻，各模型預測值距離 THR 的誤差」
+# 4. 檔名加上 MA，避免互相覆蓋
+
+import os
 from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 root = os.getcwd()
 pred_dir = Path(f"{root}\\prediction\\F05")
-MA = 'MA20'
 
-# 讀 64 點 HI（MA50）
-hi_df = pd.read_csv(pred_dir / "01_F05_HI_full.csv", index_col=0).sort_index()
-y_all = hi_df[MA].values
-fl_all = hi_df.index.values
-N_CONTEXT, H = 65, 16
+# 你在 02_landing_gear_HI_TSF.py 就是這 6 條
+MA_LIST = ["MA05", "MA10", "MA20", "MA30", "MA40", "MA50"]
 
-ctx = y_all[:N_CONTEXT]
-y_true = y_all[N_CONTEXT:N_CONTEXT+H]
-fl_ctx = fl_all[:N_CONTEXT]
-fl_fut = fl_all[N_CONTEXT:N_CONTEXT+H]
-
-# 讀傳統模型 16 點預測
-# classic = pd.read_csv(pred_dir / "F05_traditional_pred16_all.csv", index_col=0)
-
-classic = pd.read_csv(pred_dir / f"03_F05_traditional_{MA}_pred{H}_all.csv", index_col=0)
-preds = {
-    "AR": classic["AR"].values,
-    "GPR": classic["GPR"].values,
-    "ARIMA": classic["ARIMA"].values,
-}
-
-# 讀 TimesFM / Chronos（若存在）
-def read_pred(name, MA):
-    model_dict = {'TimesFM':'07', 'Chronos':'08', 'TTMs':'09'}
-    p = pred_dir / f"{model_dict[name]}_F05_{name}_{MA}_pred{H}.csv"
-    if p.exists():
-        df = pd.read_csv(p)
-        return df["pred" if "TimesFM" not in name and "Chronos" not in name and "TTMs" not in name else df.columns[-1]].values
-    return None
-
-# 若你用了我上一版檔名：F05_TimesFM_pred16.csv / F05_Chronos_pred16.csv
-# if (pred_dir / "F05_TimesFM_pred16.csv").exists():
-#     preds["TimesFM"] = pd.read_csv(pred_dir / "F05_TimesFM_pred16.csv")["TimesFM_pred"].values
-# if (pred_dir / "F05_Chronos_pred16.csv").exists():
-#     preds["Chronos"] = pd.read_csv(pred_dir / "F05_Chronos_pred16.csv")["Chronos_pred"].values
-preds["TimesFM"] = read_pred('TimesFM', MA)
-preds["Chronos"] = read_pred('Chronos', MA)
-preds['TTMs'] = read_pred('TTMs', MA)
-
-print('AI Pretrained Model predicts: ', preds)
-
-# --- 閾值與 helper ---
-THR = 0.5
+THR = 0.6                # 你原來的門檻是 0.6
 THR_STR = str(THR).replace('.', '_')
+N_CONTEXT, H = 65, 16    # 你的 F05 案子固定就是 65 + 16
 
-def first_cross_idx(arr, thr=THR):
-    """回傳第一次 <= thr 的索引（0-based），若無則回 None"""
+def first_cross_idx(arr, thr):
+    """回傳第一次 <= thr 的 index，若沒有就回 None"""
+    if arr is None:
+        return None
     idx = np.where(arr <= thr)[0]
     return int(idx[0]) if len(idx) > 0 else None
 
-# 真值觸發點（在後 16 範圍內）
-true_idx = first_cross_idx(y_true, THR)  # 0..15 or None
-true_row = {
-    "true_cross_idx": true_idx,
-    "true_cross_flight": (fl_fut[true_idx] if true_idx is not None else None),
-}
+def read_model_pred(pred_dir, name, MA, H):
+    """讀 07/08/09 那些模型的預測，按你的檔名規則"""
+    model_id = {"TimesFM": "07", "Chronos": "08", "TTMs": "09"}
+    p = pred_dir / f"{model_id[name]}_F05_{name}_{MA}_pred{H}.csv"
+    if not p.exists():
+        return None
+    df = pd.read_csv(p)
+    # 你之前的檔案都是 flight + 預測值一欄，所以拿最後一欄最穩
+    return df.iloc[:, -1].values
 
-# 各模型 RUL 誤差（步數與 flight）
-rows=[]
-for m, phat in preds.items():
-    pred_idx = first_cross_idx(phat, THR)
-    pred_flt = fl_fut[pred_idx] if pred_idx is not None else None
-    # 誤差定義：
-    # 1) steps：|pred_idx - true_idx|
-    # 2) flights：以 flight 編號差值（若連號，與 steps 等價）
-    if (true_idx is not None) and (pred_idx is not None):
-        err_steps = abs(pred_idx - true_idx)
-        err_flt   = abs(int(pred_flt) - int(true_row["true_cross_flight"]))
-    else:
-        err_steps = np.nan
-        err_flt   = np.nan
+for MA in MA_LIST:
+    # 讀完整 HI
+    hi_df = pd.read_csv(pred_dir / "01_F05_HI_full.csv", index_col=0).sort_index()
+    if MA not in hi_df.columns:
+        print(f"[WARN] {MA} not found in 01_F05_HI_full.csv, skip.")
+        continue
 
-    rows.append({
-        "model": m,
-        "pred_cross_idx": pred_idx,
-        "pred_cross_flight": pred_flt,
-        "AbsErr_steps": err_steps,
-        "AbsErr_flight": err_flt,
-    })
+    y_all = hi_df[MA].values
+    fl_all = hi_df.index.values
 
-rul_df = pd.DataFrame(rows).sort_values("AbsErr_steps", na_position="last").reset_index(drop=True)
-rul_df.insert(0, "true_cross_idx", true_row["true_cross_idx"])
-rul_df.insert(1, "true_cross_flight", true_row["true_cross_flight"])
-rul_df.to_csv(pred_dir / f"10_F05_eval_RUL_thr{THR_STR}.csv", index=False)
-print(f"\n[RUL @ HI<={THR}]")
-print(rul_df)
+    ctx = y_all[:N_CONTEXT]
+    y_true = y_all[N_CONTEXT:N_CONTEXT+H]
+    fl_ctx = fl_all[:N_CONTEXT]
+    fl_fut = fl_all[N_CONTEXT:N_CONTEXT+H]
 
-# --- 視覺化：畫 64 點 + 閾值 + 各模型觸發點 ---
-plt.figure(figsize=(10,5))
-plt.plot(fl_all, y_all, color="black", linewidth=3, label=f"Ground Truth ({MA})")
-plt.axvline(fl_ctx[-1], color="gray", linestyle=":", alpha=0.6)
-plt.axhline(THR, color="red", linestyle="--", alpha=0.7, label=f"Threshold {THR:.2f}")
+    # 傳統模型（你之前就有產生）
+    classic_path = pred_dir / f"03_F05_traditional_{MA}_pred{H}_all.csv"
+    if not classic_path.exists():
+        print(f"[WARN] {classic_path} not found, skip {MA}.")
+        continue
+    classic = pd.read_csv(classic_path, index_col=0)
 
-# 真值觸發點
-if true_row["true_cross_flight"] is not None:
-    plt.scatter([true_row["true_cross_flight"]], [THR], s=70, c="red", marker="x", label="True crossing")
+    preds = {
+        "AR": classic["AR"].values,
+        "GPR": classic["GPR"].values,
+        "ARIMA": classic["ARIMA"].values,
+    }
 
-# 各模型觸發點（在後 16）
-for m, phat in preds.items():
-    idx = first_cross_idx(phat, THR)
-    if idx is not None:
-        plt.scatter([fl_fut[idx]], [THR], s=60, marker="o", label=f"{m} crossing")
+    # TimesFM / Chronos / TTMs
+    preds["TimesFM"] = read_model_pred(pred_dir, "TimesFM", MA, H)
+    preds["Chronos"] = read_model_pred(pred_dir, "Chronos", MA, H)
+    preds["TTMs"]    = read_model_pred(pred_dir, "TTMs", MA, H)
 
-plt.title(f"F05 | RUL based on HI<={THR} (context={N_CONTEXT}, horizon={H})")
-plt.xlabel("Flight")
-plt.ylabel(f"CV ({MA})")
-plt.grid(True, alpha=0.3)
-plt.legend()
-plt.tight_layout()
-plt.savefig(pred_dir / f"11_F05_eval_full{N_CONTEXT+H}_RUL.png", dpi=160)
-plt.show()
+    # --- 真值的觸發點 ---
+    true_idx = first_cross_idx(y_true, THR)
+    true_row = {
+        "true_cross_idx": true_idx,
+        "true_cross_flight": (fl_fut[true_idx] if true_idx is not None else None),
+    }
+
+    # --- 各模型計算兩種誤差 ---
+    rows = []
+    for m, phat in preds.items():
+        # ① 原本的 RUL 誤差：看模型自己何時掉到 THR
+        pred_idx = first_cross_idx(phat, THR)
+        pred_flt = fl_fut[pred_idx] if pred_idx is not None else None
+
+        if (true_idx is not None) and (pred_idx is not None):
+            err_steps = abs(pred_idx - true_idx)
+            err_flt   = abs(int(pred_flt) - int(true_row["true_cross_flight"]))
+        else:
+            err_steps = np.nan
+            err_flt   = np.nan
+
+        # ② 新的：GT 到 THR 那一刻，模型的值離 THR 多遠
+        if true_idx is not None and phat is not None and true_idx < len(phat):
+            pred_val_at_true = phat[true_idx]
+            abs_val_err = abs(pred_val_at_true - THR)
+            signed_err  = pred_val_at_true - THR
+        else:
+            abs_val_err = np.nan
+            signed_err  = np.nan
+
+        rows.append({
+            "model": m,
+            "pred_cross_idx": pred_idx,
+            "pred_cross_flight": pred_flt,
+            "AbsErr_steps": err_steps,
+            "AbsErr_flight": err_flt,
+            "AbsErr_value_at_true_thr": abs_val_err,
+            "SignedErr_value_at_true_thr": signed_err,
+        })
+
+    rul_df = pd.DataFrame(rows)
+    rul_df.insert(0, "MA", MA)
+    rul_df.insert(1, "true_cross_idx", true_row["true_cross_idx"])
+    rul_df.insert(2, "true_cross_flight", true_row["true_cross_flight"])
+
+    # 排序一下：先看「時間軸 RUL 誤差」、再看「同時刻值誤差」
+    rul_df = rul_df.sort_values(["AbsErr_steps", "AbsErr_value_at_true_thr"], na_position="last").reset_index(drop=True)
+
+    out_csv = pred_dir / f"10_F05_eval_RUL_{MA}_thr{THR_STR}.csv"
+    rul_df.to_csv(out_csv, index=False)
+    print(f"[06][{MA}] RUL evaluation saved → {out_csv}")
+
+    # --- 畫圖：跟你原本一樣，只是檔名加 MA ---
+    plt.figure(figsize=(10, 5))
+    plt.plot(fl_all, y_all, color="black", linewidth=3, label=f"Ground Truth ({MA})")
+    plt.axvline(fl_ctx[-1], color="gray", linestyle=":", alpha=0.6)
+    plt.axhline(THR, color="red", linestyle="--", alpha=0.7, label=f"Threshold {THR:.2f}")
+
+    if true_row["true_cross_flight"] is not None:
+        plt.scatter([true_row["true_cross_flight"]], [THR], s=70, c="red", marker="x", label="True crossing")
+
+    # 模型觸發點 + noise
+    for m, phat in preds.items():
+        if phat is None:
+            continue
+        idx = first_cross_idx(phat, THR)
+        if idx is not None:
+            jitter = np.random.uniform(-0.02, 0.02)   # 在 THR 附近加擾動
+            plt.scatter([fl_fut[idx]], [THR + jitter], s=70, marker="o", label=f"{m} crossing")
+
+    plt.title(f"F05 | RUL based on HI<={THR} ({MA})  ctx={N_CONTEXT}, horizon={H}")
+    plt.xlabel("Flight")
+    plt.ylabel(f"CV ({MA})")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    out_png = pred_dir / f"11_F05_eval_full{N_CONTEXT+H}_RUL_{MA}.png"
+    plt.savefig(out_png, dpi=160)
+    plt.close()
+    print(f"[06][{MA}] plot saved → {out_png}")

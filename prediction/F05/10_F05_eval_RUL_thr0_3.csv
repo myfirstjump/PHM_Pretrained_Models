@@ -1,7 +1,0 @@
-true_cross_idx,true_cross_flight,model,pred_cross_idx,pred_cross_flight,AbsErr_steps,AbsErr_flight
-,,AR,,,,
-,,GPR,,,,
-,,ARIMA,,,,
-,,TimesFM,,,,
-,,Chronos,,,,
-,,TTMs,,,,

@@ -8,9 +8,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ExpSineSquared, WhiteKernel
+from sklearn.gaussian_process.kernels import RBF, ExpSineSquared, WhiteKernel, ConstantKernel
 from statsmodels.tsa.ar_model import ar_select_order
 from statsmodels.tsa.arima.model import ARIMA
+# from pmdarima import auto_arima
 
 # === 你剛寫的工具 ===
 from py_modules.common_utils import (
@@ -86,6 +87,7 @@ for RND in ["MA05", "MA10", "MA20", "MA30", "MA40", "MA50"]:
     # (a) AR (自動挑階數)
     try:
         ar_order = ar_select_order(y_ctx, maxlag=10, glob=True, trend="ct")
+        print(f'For {RND}, AR select order: {ar_order.ar_lags}')
         ar_res = ar_order.model.fit()
         ar_pred = ar_res.predict(start=len(y_ctx), end=len(y_ctx) + N_HORIZON - 1)
         ar_pred = np.asarray(ar_pred).ravel()
@@ -98,22 +100,51 @@ for RND in ["MA05", "MA10", "MA20", "MA30", "MA40", "MA50"]:
     k1 = ExpSineSquared(length_scale=1.0, periodicity=40, periodicity_bounds=(20, 80))
     k2 = RBF(length_scale=1e2, length_scale_bounds=(1, 1e3))
     kernel = k0 + k1 + k2
+    # ---
+    # k0 = WhiteKernel(noise_level=0.05**2, noise_level_bounds=(1e-5, 0.2))
+    # k1 = ExpSineSquared(length_scale=1.0, periodicity=40, periodicity_bounds=(20, 80))
+    # k2 = RBF(length_scale=5.0, length_scale_bounds=(1e-1, 50))
+    # kernel = k0 + k2
+    # ---
+    # kernel = ConstantKernel(1.0, (1e-3, 1e3)) * RBF(5.0, (1e-2, 50.0)) \
+    #      + WhiteKernel(0.03**2, (1e-6, 0.1))
 
     X_train = np.arange(len(y_ctx)).reshape(-1, 1)
-    gpr = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=False)
+    gpr = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=True)
     gpr.fit(X_train, y_ctx.reshape(-1, 1))
     X_future = np.arange(len(y_ctx), len(y_ctx) + N_HORIZON).reshape(-1, 1)
     gpr_pred, _ = gpr.predict(X_future, return_std=True)
     gpr_pred = gpr_pred.ravel()
 
-    # (c) ARIMA(2,1,0)（可再調整）
-    try:
-        arima = ARIMA(y_ctx, order=(2, 1, 0), trend='t')
-        arima_res = arima.fit(method='innovations_mle')
-        arima_pred = arima_res.forecast(steps=N_HORIZON)
+    # (c) ARIMA：用 AIC 格點搜尋自動選 (p,d,q)
+    # 搜尋範圍可以視資料長度調小一點，避免太慢
+    best_aic = float("inf")
+    best_order = None
+    best_model = None
+
+    # 這裡我假設你的序列已經是 MA 過的、也不算太長
+    # 所以 d 只試 0 和 1 就好；p 試 0~5；q 試 0~3
+    for p in range(0, 6):
+        for d in range(0, 2):
+            for q in range(0, 4):
+                try:
+                    tmp_model = ARIMA(y_ctx, order=(p, d, q)).fit()
+                    tmp_aic = tmp_model.aic
+                    if tmp_aic < best_aic:
+                        best_aic = tmp_aic
+                        best_order = (p, d, q)
+                        best_model = tmp_model
+                except Exception:
+                    # 有些組合會發散或無法估計，跳過即可
+                    continue
+
+    if best_model is not None:
+        print(f"[ARIMA-grid] {RND} best order (p,d,q) = {best_order}, AIC = {best_aic:.2f}")
+        arima_pred = best_model.forecast(steps=N_HORIZON)
         arima_pred = np.asarray(arima_pred).ravel()
-    except Exception as e:
-        print("[ARIMA] fallback:", e)
+    else:
+        # 萬一全部失敗，就給 NaN，避免整支程式掛掉
+        print(f"[ARIMA-grid] {RND} no valid model found, fill NaN")
         arima_pred = np.full(N_HORIZON, np.nan)
 
     # ==== 4) 整理與輸出 ====

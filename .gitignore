@@ -8,8 +8,12 @@ bin-release/
 .settings/
 timesfm/
 __pycache__/
-data/
-models/
+# leading slash: root-level only, so src/data/ stays tracked
+/data/
+/models/
+
+# Paper drafts, literature notes and source PDFs (some are paywalled — keep local)
+docs/
 
 # Executables
 *.swf

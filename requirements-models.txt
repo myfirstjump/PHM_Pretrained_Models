@@ -1,0 +1,7 @@
+# Pretrained TSF foundation models (CPU). Install with:
+#   pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt -r requirements-models.txt
+torch>=2.4
+# TimesFM 2.5 (TimesFM_2p5_200M_torch API) is not on PyPI; install from GitHub
+timesfm @ git+https://github.com/google-research/timesfm.git
+chronos-forecasting>=1.4
+granite-tsfm>=0.2.23

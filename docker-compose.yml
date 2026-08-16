@@ -1,0 +1,15 @@
+services:
+  phm:
+    build: .
+    image: phm-pretrained-models:latest
+    volumes:
+      - ./data:/app/data
+      - ./prediction:/app/prediction
+      - hf-cache:/app/.hf_cache
+    # Usage:
+    #   docker compose run --rm phm build-hi
+    #   docker compose run --rm phm forecast --model timesfm
+    #   docker compose run --rm phm eval --task all
+
+volumes:
+  hf-cache:

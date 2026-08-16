@@ -1,2 +1,8 @@
-pandas
-sklearn
+# Core stack: HI pipeline + traditional forecasting + evaluation (no deep learning).
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+scipy>=1.11
+statsmodels>=0.14
+matplotlib>=3.8
+joblib>=1.3

@@ -7,10 +7,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+# CONTEXT_FOLDER / GT_FOLDER (F05_custom, F05_prediction_gt) are deliberately NOT
+# imported: they are synthetic — hand-picked, re-sequenced and renumbered for a report
+# deadline — so nothing in this module may reach them. config.py still defines them as
+# a documented fallback. See README "Data notes".
 from ..config import (
-    AVA, CONTEXT_FOLDER, F05_SERIES_FOLDER, FEAT_IDXS, FEATURES_DIR, GT_FOLDER,
+    AVA, F05_SERIES_FOLDER, FEAT_IDXS, FEATURES_DIR,
     HI_HOLDOUT_AVAS, HI_PIPELINE_LOAO_PATH, HI_PIPELINE_PATH, ID_COLS, MA_WINDOWS,
-    MODEL_DIR, N_CONTEXT, THR_LEGACY, pred_dir,
+    MODEL_DIR, N_CONTEXT, N_HORIZON, THR_LEGACY, pred_dir,
 )
 from ..plotting import label, plt
 from .features import build_feature_table
@@ -133,15 +137,33 @@ def make_hi_series(folder_path, pipe_path=HI_PIPELINE_PATH) -> pd.DataFrame:
 
 
 def build_hi_full(ava: str = AVA) -> pd.DataFrame:
-    """Context + ground-truth folders -> full HI series with causal MAs, saved to prediction/."""
+    """The real F05 series -> HI with causal MAs on both scales, saved to prediction/.
+
+    Phase 2 rebuild (2026-09-20). This used to concatenate `F05_custom` (65 flights)
+    with `F05_prediction_gt` (16), but those were hand-picked and re-sequenced for a
+    report deadline, and the "ground truth" was F08 pre-depot flights the HI model had
+    already trained on. They stay on disk as a fallback; the default path now reads
+    `F05_SERIES_FOLDER` — sorties 1244-1431 in true chronological order, 64 flights,
+    no maintenance event inside — and scores it with the LOAO pipeline, which never
+    saw F05. So the series is genuinely unseen at HI inference time.
+
+    Both scales get moving averages. Note `logit_MAw` is mean(logit), NOT
+    logit(mean(CV)) — Jensen's inequality makes those different series (0.34-0.84
+    logit units apart on this data), so the definition has to be stated in the paper.
+    """
     out_dir = pred_dir(ava)
 
-    print(f"[build-hi] context: {CONTEXT_FOLDER}")
-    ctx_df = make_hi_series(CONTEXT_FOLDER)
-    print(f"[build-hi] ground truth: {GT_FOLDER}")
-    gt_df = make_hi_series(GT_FOLDER)
+    print(f"[build-hi] series: {F05_SERIES_FOLDER}")
+    print(f"[build-hi] HI pipeline: {HI_PIPELINE_LOAO_PATH.name}")
+    hi_df = make_hi_series(F05_SERIES_FOLDER, HI_PIPELINE_LOAO_PATH).sort_index()
 
-    hi_df = pd.concat([ctx_df, gt_df]).sort_index()
+    need = N_CONTEXT + N_HORIZON
+    if len(hi_df) < need:
+        raise ValueError(
+            f"{F05_SERIES_FOLDER.name} has {len(hi_df)} flights but the split needs "
+            f"{need} (N_CONTEXT {N_CONTEXT} + N_HORIZON {N_HORIZON})."
+        )
+
     for name, window in MA_WINDOWS.items():
         hi_df[name] = hi_df["CV"].rolling(window=window, min_periods=1).mean()
         hi_df[f"logit_{name}"] = hi_df["logit"].rolling(window=window, min_periods=1).mean()

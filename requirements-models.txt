@@ -1,7 +1,45 @@
-# Pretrained TSF foundation models (CPU). Install with:
-#   pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt -r requirements-models.txt
-torch>=2.4
-# TimesFM 2.5 (TimesFM_2p5_200M_torch API) is not on PyPI; install from GitHub
+# Pretrained TSF foundation models. Four are reported (see docs/tsfm_landscape.md §0):
+#   TimesFM 3.0        google/timesfm-3.0-pytorch                    330M
+#   Chronos-2          amazon/chronos-2                              120M
+#   PatchTST-FM-r2     ibm-granite/granite-timeseries-patchtst-fm-r2 385M
+#   MOIRAI 2.0-R-small Salesforce/moirai-2.0-R-small                 11.4M
+#
+# INSTALL ORDER MATTERS — do not just `pip install -r` this file.
+#
+# 1. torch first, matching your GPU. The dev machine is an RTX 5060 (Blackwell,
+#    sm_120), which only the cu128 wheels support; cu121 silently has no kernel:
+#        pip install torch --index-url https://download.pytorch.org/whl/cu128
+#    CPU-only box (e.g. the Linode) instead:
+#        pip install torch --index-url https://download.pytorch.org/whl/cpu
+#    Never use the README's --extra-index-url .../whl/cpu alongside a CUDA build:
+#    pip will happily replace the CUDA wheel with the CPU one.
+#
+# 2. Then everything in the "resolved normally" block below.
+#
+# 3. Then MOIRAI, with --no-deps (see the note at the bottom):
+#        pip install --no-deps uni2ts "gluonts==0.14.4" hydra-core omegaconf \
+#                              jaxtyping antlr4-python3-runtime wadler-lindig
+#        pip install lightning
+
+# --- resolved normally -----------------------------------------------------
+torch>=2.7            # >=2.7 for sm_120; the cu128 build is installed in step 1
+# TimesFM 3.0 (TimesFM3Forecaster API) is not on PyPI; install from GitHub
 timesfm @ git+https://github.com/google-research/timesfm.git
-chronos-forecasting>=1.4
-granite-tsfm>=0.2.23
+chronos-forecasting>=2.3    # provides Chronos2Pipeline
+granite-tsfm>=0.3.9         # provides PatchTSTFMForPrediction
+
+# --- MOIRAI 2.0: why --no-deps ---------------------------------------------
+# uni2ts 2.0.0 declares torch<2.5, numpy~=1.26.0, scipy~=1.11.3 and gluonts~=0.14.3.
+# The torch/numpy/scipy pins are over-conservative — MOIRAI 2.0 loads and runs
+# correctly on torch 2.11+cu128 / numpy 2.5 / scipy 1.18, verified on this project's
+# context 65 / 32 / 16 shapes. Letting pip resolve them, however, downgrades torch to
+# 2.4.1+cpu, which kills CUDA on Blackwell *and* breaks granite-tsfm (it requires
+# torch>=2.10, pandas>=2.3.3). The two packages cannot coexist under normal resolution.
+#
+# The gluonts pin IS real: 0.17 changed `make_predictions`, and the MOIRAI predictor
+# fails with "not enough values to unpack (expected 3, got 1)". Pin gluonts to 0.14.4.
+#
+# uni2ts
+# gluonts==0.14.4
+# hydra-core, omegaconf, jaxtyping, antlr4-python3-runtime, wadler-lindig
+# lightning            (normal install; uni2ts imports it but declares only >=2.0)

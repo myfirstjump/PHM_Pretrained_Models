@@ -13,7 +13,14 @@ __pycache__/
 /models/
 
 # Paper drafts, literature notes and source PDFs (some are paywalled — keep local)
+# This also covers the progress/status write-ups (docs/implementation_status.html).
 docs/
+
+# Working notes kept local: running question list, ad-hoc progress and file inventories
+/專案提問
+/檔案資訊
+/進度*
+*.tmp.md
 
 # Executables
 *.swf

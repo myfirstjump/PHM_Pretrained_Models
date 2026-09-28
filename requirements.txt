@@ -6,3 +6,5 @@ scipy>=1.11
 statsmodels>=0.14
 matplotlib>=3.8
 joblib>=1.3
+# pandas needs this to read data/.../testingLabel.xlsx (src/data/labels.py)
+openpyxl>=3.1

@@ -35,15 +35,52 @@ ID_COLS = ["plane", "flight"]
 
 # --- Forecast experiment (F05 case) ---
 AVA = "F05"
+# Retired 2026-09-20 (phase 2): hand-picked and re-sequenced, kept on disk as a
+# fallback but no longer on the default path. See README "Data notes".
 CONTEXT_FOLDER = RAW_DIR / "F05_custom"
 GT_FOLDER      = RAW_DIR / "F05_prediction_gt"
 # The real, unedited F05 series: sorties 1244-1431 in true chronological order,
-# no maintenance event inside it. Replaces CONTEXT_FOLDER/GT_FOLDER in phase 2.
+# no maintenance event inside it. This is what `build-hi` reads.
 F05_SERIES_FOLDER = RAW_DIR / "F05_reserved"
-N_CONTEXT = 65
-N_HORIZON = 16
+
+# Track A split. F05_reserved holds 64 flights, so the legacy 65+16=81 window the
+# spliced F05_custom/F05_prediction_gt series allowed simply does not fit. 32/8
+# leaves 64-32-8+1 = 25 rolling origins, which is the point of the rebuild: one
+# window proves nothing.
+N_CONTEXT = 32
+N_HORIZON = 8
+# The retired single-window split, kept so pre-2026-09 filenames stay readable.
+N_CONTEXT_LEGACY = 65
+N_HORIZON_LEGACY = 16
+
 MA_WINDOWS = {"MA05": 5, "MA10": 10, "MA20": 20, "MA30": 30, "MA40": 40, "MA50": 50}
-MA_LIST = list(MA_WINDOWS)
+# "raw" is the unsmoothed series and leads the list because it is the only target
+# with zero leakage at every horizon: forecasting MA(w) at step h, a fraction
+# (w-h)/w of the answer is already observed (MA50 at h=8 is 84% known). MA10-MA50
+# belong in a sensitivity appendix with that fraction stated, not in headline results.
+MA_LIST = ["raw"] + list(MA_WINDOWS)
+
+# --- Forecast scale ---
+# `cv`    - the probability HI, P(healthy), bounded in [0, 1]
+# `logit` - ln(CV / (1-CV)), the LR's own linear output
+# The sigmoid saturates: ~30% of the F05 series sits above 0.95 or below 0.05,
+# where the average step is only 0.39x the non-saturated one on the CV scale but
+# 1.02x on the logit scale. Forecasting the probability therefore trains the
+# extrapolator on a signal that is compressed exactly where a third of the data
+# lives, so `logit` is the default target. Errors are still reported on the CV
+# scale (save_pred back-transforms), which keeps results comparable with the
+# earlier CV-scale runs and guarantees predictions land in [0, 1].
+SCALES = ("cv", "logit")
+SCALE_DEFAULT = "logit"
+
+
+def ma_column(ma: str, scale: str = SCALE_DEFAULT) -> str:
+    """('MA05', 'logit') -> 'logit_MA05'. Raw (unsmoothed) is 'CV' / 'logit'."""
+    if scale not in SCALES:
+        raise ValueError(f"Unknown scale {scale!r} (expected one of {SCALES})")
+    if ma == "raw":
+        return "CV" if scale == "cv" else "logit"
+    return ma if scale == "cv" else f"logit_{ma}"
 
 # --- RUL evaluation ---
 # Two derived thresholds replace the single hand-picked 0.6 (see thresholds.py):

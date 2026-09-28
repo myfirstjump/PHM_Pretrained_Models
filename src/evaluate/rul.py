@@ -2,9 +2,11 @@
 import numpy as np
 import pandas as pd
 
-from ..config import AVA, MA_LIST, N_CONTEXT, N_HORIZON, THR, pred_dir
+from ..config import (
+    AVA, MA_LIST, N_CONTEXT, N_HORIZON, SCALE_DEFAULT, THR, ma_column, pred_dir,
+)
 from ..plotting import plt
-from .readers import read_classic, read_pretrained
+from .readers import ACTIVE_MODELS, read_classic, read_pretrained
 
 
 def first_cross_idx(arr, thr):
@@ -15,7 +17,14 @@ def first_cross_idx(arr, thr):
     return int(idx[0]) if len(idx) > 0 else None
 
 
-def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR) -> None:
+def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR,
+        scale: str = SCALE_DEFAULT) -> None:
+    """Threshold-crossing RUL, always evaluated on the CV scale.
+
+    `thr` is a CV-scale threshold and both truth and predictions are CV, so the
+    modelling scale does not move any crossing time: logit is a strictly monotone
+    transform of CV. `scale` therefore only selects which forecast run to score.
+    """
     out_dir = pred_dir(ava)
     thr_str = str(thr).replace(".", "_")
     suffix_tag = "" if mode == "zero-shot" else "_ft"
@@ -23,19 +32,20 @@ def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR)
     hi_df = pd.read_csv(out_dir / f"01_{ava}_HI_full.csv", index_col=0).sort_index()
 
     for ma in (ma_list or MA_LIST):
-        if ma not in hi_df.columns:
-            print(f"[WARN] {ma} not found in 01_{ava}_HI_full.csv, skip.")
+        truth_col = ma_column(ma, "cv")
+        if truth_col not in hi_df.columns:
+            print(f"[WARN] {truth_col} not found in 01_{ava}_HI_full.csv, skip.")
             continue
 
-        y_all = hi_df[ma].values
+        y_all = hi_df[truth_col].values
         fl_all = hi_df.index.values
         y_true = y_all[N_CONTEXT:N_CONTEXT + N_HORIZON]
         fl_ctx = fl_all[:N_CONTEXT]
         fl_fut = fl_all[N_CONTEXT:N_CONTEXT + N_HORIZON]
 
-        classic = read_classic(out_dir, ava, ma)
+        classic = read_classic(out_dir, ava, ma, scale)
         if classic is None:
-            print(f"[WARN] traditional predictions for {ma} not found, skip.")
+            print(f"[WARN] traditional predictions for {ma} ({scale}) not found, skip.")
             continue
 
         preds = {
@@ -43,8 +53,8 @@ def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR)
             "GPR": classic["GPR"].values,
             "ARIMA": classic["ARIMA"].values,
         }
-        for name in ("TimesFM", "Chronos", "TTMs"):
-            preds[name] = read_pretrained(out_dir, ava, name, ma, mode)
+        for name in ACTIVE_MODELS:
+            preds[name] = read_pretrained(out_dir, ava, name, ma, mode, scale)
 
         true_idx = first_cross_idx(y_true, thr)
         true_flight = fl_fut[true_idx] if true_idx is not None else None
@@ -87,7 +97,7 @@ def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR)
             ["AbsErr_steps", "AbsErr_value_at_true_thr"], na_position="last"
         ).reset_index(drop=True)
 
-        out_csv = out_dir / f"10_{ava}_eval_RUL_{ma}_thr{thr_str}{suffix_tag}.csv"
+        out_csv = out_dir / f"10_{ava}_eval_RUL_{ma}_thr{thr_str}_{scale}{suffix_tag}.csv"
         rul_df.to_csv(out_csv, index=False)
         print(f"[eval-rul][{ma}] saved -> {out_csv}")
 
@@ -109,7 +119,7 @@ def run(ava: str = AVA, ma_list=None, mode: str = "zero-shot", thr: float = THR)
         plt.grid(True, alpha=0.3)
         plt.legend()
         plt.tight_layout()
-        out_png = out_dir / f"11_{ava}_eval_full{N_CONTEXT + N_HORIZON}_RUL_{ma}{suffix_tag}.png"
+        out_png = out_dir / f"11_{ava}_eval_full{N_CONTEXT + N_HORIZON}_RUL_{ma}_{scale}{suffix_tag}.png"
         plt.savefig(out_png, dpi=160)
         plt.close()
         print(f"[eval-rul][{ma}] plot saved -> {out_png}")

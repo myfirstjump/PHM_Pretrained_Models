@@ -6,16 +6,25 @@ Examples:
     python main.py train-hi
     python main.py build-hi
     python main.py forecast --model traditional
-    python main.py forecast --model timesfm --ma MA50
-    python main.py forecast --model all
+    python main.py forecast --model timesfm --ma MA05
+    python main.py forecast --model moirai --scale logit
+    python main.py forecast --model all          # traditional + 4 foundation models
     python main.py eval --task tsf
     python main.py eval --task rul --thr 0.6
 """
 import argparse
 
-from src.config import AVA, HI_HOLDOUT_AVAS, MA_LIST, THR
+from src.config import AVA, HI_HOLDOUT_AVAS, MA_LIST, SCALE_DEFAULT, SCALES, THR
 
-FORECAST_MODELS = ["traditional", "timesfm", "chronos", "ttm"]
+# The four foundation models this study reports, picked in docs/tsfm_landscape.md §0:
+#   timesfm  - TimesFM 3.0        (330M, non-commercial licence, research only)
+#   chronos  - Chronos-2          (120M, Apache 2.0)
+#   patchtst - PatchTST-FM-r2     (385M, Apache 2.0 + OpenMDW)
+#   moirai   - MOIRAI 2.0-R-small (11.4M, CC-BY-NC-4.0, research only)
+# `ttm` is deliberately absent: src/forecast/ttm_fc.py stays on disk for the
+# context-length discussion (§3.2) but the 512-point minimum makes a 32-point
+# context out of spec, so it is not part of the reported comparison.
+FORECAST_MODELS = ["traditional", "timesfm", "chronos", "patchtst", "moirai"]
 
 
 def _ma_args(args):
@@ -43,28 +52,32 @@ def cmd_build_hi(args):
 
 def cmd_forecast(args):
     models = FORECAST_MODELS if args.model == "all" else [args.model]
+    kw = dict(mode=args.mode, checkpoint=args.checkpoint, scale=args.scale)
     for model in models:
         if model == "traditional":
             from src.forecast import traditional
-            traditional.run(args.ava, _ma_args(args))
+            traditional.run(args.ava, _ma_args(args), scale=args.scale)
         elif model == "timesfm":
             from src.forecast import timesfm_fc
-            timesfm_fc.run(args.ava, _ma_args(args), mode=args.mode, checkpoint=args.checkpoint)
+            timesfm_fc.run(args.ava, _ma_args(args), **kw)
         elif model == "chronos":
             from src.forecast import chronos_fc
-            chronos_fc.run(args.ava, _ma_args(args), mode=args.mode, checkpoint=args.checkpoint)
-        elif model == "ttm":
-            from src.forecast import ttm_fc
-            ttm_fc.run(args.ava, _ma_args(args), mode=args.mode, checkpoint=args.checkpoint)
+            chronos_fc.run(args.ava, _ma_args(args), **kw)
+        elif model == "patchtst":
+            from src.forecast import patchtst_fm
+            patchtst_fm.run(args.ava, _ma_args(args), **kw)
+        elif model == "moirai":
+            from src.forecast import moirai_fc
+            moirai_fc.run(args.ava, _ma_args(args), **kw)
 
 
 def cmd_eval(args):
     if args.task in ("tsf", "all"):
         from src.evaluate import tsf_metrics
-        tsf_metrics.run(args.ava, _ma_args(args), mode=args.mode)
+        tsf_metrics.run(args.ava, _ma_args(args), mode=args.mode, scale=args.scale)
     if args.task in ("rul", "all"):
         from src.evaluate import rul
-        rul.run(args.ava, _ma_args(args), mode=args.mode, thr=args.thr)
+        rul.run(args.ava, _ma_args(args), mode=args.mode, thr=args.thr, scale=args.scale)
 
 
 def build_parser():
@@ -72,7 +85,7 @@ def build_parser():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="command", required=True)
 
-    def add_common(sp, ava=True, ma=False, mode=False):
+    def add_common(sp, ava=True, ma=False, mode=False, scale=False):
         if ava:
             sp.add_argument("--ava", default=AVA, help=f"aircraft/case id (default: {AVA})")
         if ma:
@@ -81,6 +94,10 @@ def build_parser():
         if mode:
             sp.add_argument("--mode", default="zero-shot", choices=["zero-shot", "finetuned"],
                             help="forecast mode; affects output filenames (default: zero-shot)")
+        if scale:
+            sp.add_argument("--scale", default=SCALE_DEFAULT, choices=list(SCALES),
+                            help="series the model is fitted on; predictions are always "
+                                 f"saved back-transformed to CV (default: {SCALE_DEFAULT})")
 
     sp = sub.add_parser("prepare-features", help="raw training/testing CSVs -> myfeature/*.csv")
     sp.set_defaults(func=cmd_prepare_features)
@@ -103,13 +120,13 @@ def build_parser():
     sp.add_argument("--model", required=True, choices=FORECAST_MODELS + ["all"])
     sp.add_argument("--checkpoint", default=None,
                     help="override model checkpoint (e.g. a fine-tuned local path)")
-    add_common(sp, ma=True, mode=True)
+    add_common(sp, ma=True, mode=True, scale=True)
     sp.set_defaults(func=cmd_forecast)
 
     sp = sub.add_parser("eval", help="evaluate forecasts (tsf metrics and/or RUL)")
     sp.add_argument("--task", default="all", choices=["tsf", "rul", "all"])
     sp.add_argument("--thr", type=float, default=THR, help=f"RUL HI threshold (default: {THR})")
-    add_common(sp, ma=True, mode=True)
+    add_common(sp, ma=True, mode=True, scale=True)
     sp.set_defaults(func=cmd_eval)
 
     return p
